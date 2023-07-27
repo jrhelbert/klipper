@@ -29,6 +29,11 @@ class TemperatureFan:
         self.min_speed_conf = config.getfloat(
             'min_speed', 0.3, minval=0., maxval=1.)
         self.min_speed = self.min_speed_conf
+        
+        self.smooth_time = config.getfloat('smooth_time', 1., above=0.)
+        self.inv_smooth_time = 1. / self.smooth_time
+        self.last_temp = self.smoothed_temp = self.target_temp = 0.
+        
         self.last_temp = 0.
         self.last_temp_time = 0.
         self.target_temp_conf = config.getfloat(
@@ -62,17 +67,27 @@ class TemperatureFan:
         self.last_speed_value = value
         self.fan.set_speed(speed_time, value)
     def temperature_callback(self, read_time, temp):
+        if self.smoothed_temp == 0:
+            self.smoothed_temp = temp
+            
+        time_diff = read_time - self.last_temp_time
         self.last_temp = temp
+        self.last_temp_time = read_time
+        temp_diff = temp - self.smoothed_temp
+        adj_time = min(time_diff * self.inv_smooth_time, 1.)
+        self.smoothed_temp += temp_diff * adj_time
         self.control.temperature_callback(read_time, temp)
+    def get_smooth_time(self):
+        return self.smooth_time
     def get_temp(self, eventtime):
-        return self.last_temp, self.target_temp
+        return self.smoothed_temp, self.target_temp
     def get_min_speed(self):
         return self.min_speed
     def get_max_speed(self):
         return self.max_speed
     def get_status(self, eventtime):
         status = self.fan.get_status(eventtime)
-        status["temperature"] = round(self.last_temp, 2)
+        status["temperature"] = round(self.smoothed_temp, 2)
         status["target"] = self.target_temp
         return status
     cmd_SET_TEMPERATURE_FAN_TARGET_help = \
@@ -146,7 +161,8 @@ class ControlPID:
         self.Kp = config.getfloat('pid_Kp') / PID_PARAM_BASE
         self.Ki = config.getfloat('pid_Ki') / PID_PARAM_BASE
         self.Kd = config.getfloat('pid_Kd') / PID_PARAM_BASE
-        self.min_deriv_time = config.getfloat('pid_deriv_time', 2., above=0.)
+        self.min_deriv_time = temperature_fan.get_smooth_time()
+        # self.min_deriv_time = config.getfloat('pid_deriv_time', 2., above=0.)
         self.temp_integ_max = 0.
         if self.Ki:
             self.temp_integ_max = self.temperature_fan.get_max_speed() / self.Ki
@@ -154,6 +170,7 @@ class ControlPID:
         self.prev_temp_time = 0.
         self.prev_temp_deriv = 0.
         self.prev_temp_integ = 0.
+        
     def temperature_callback(self, read_time, temp):
         current_temp, target_temp = self.temperature_fan.get_temp(read_time)
         time_diff = read_time - self.prev_temp_time
@@ -165,7 +182,7 @@ class ControlPID:
             temp_deriv = (self.prev_temp_deriv * (self.min_deriv_time-time_diff)
                           + temp_diff) / self.min_deriv_time
         # Calculate accumulated temperature "error"
-        temp_err = target_temp - temp
+        temp_err = target_temp - current_temp
         temp_integ = self.prev_temp_integ + temp_err * time_diff
         temp_integ = max(0., min(self.temp_integ_max, temp_integ))
         # Calculate output
@@ -175,7 +192,7 @@ class ControlPID:
             read_time, max(self.temperature_fan.get_min_speed(),
                            self.temperature_fan.get_max_speed() - bounded_co))
         # Store state for next measurement
-        self.prev_temp = temp
+        self.prev_temp = current_temp
         self.prev_temp_time = read_time
         self.prev_temp_deriv = temp_deriv
         if co == bounded_co:
