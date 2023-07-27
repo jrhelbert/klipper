@@ -29,11 +29,11 @@ class TemperatureFan:
         self.min_speed_conf = config.getfloat(
             'min_speed', 0.3, minval=0., maxval=1.)
         self.min_speed = self.min_speed_conf
-        
+
         self.smooth_time = config.getfloat('smooth_time', 1., above=0.)
         self.inv_smooth_time = 1. / self.smooth_time
         self.last_temp = self.smoothed_temp = self.target_temp = 0.
-        
+
         self.last_temp = 0.
         self.last_temp_time = 0.
         self.target_temp_conf = config.getfloat(
@@ -69,7 +69,7 @@ class TemperatureFan:
     def temperature_callback(self, read_time, temp):
         if self.smoothed_temp == 0:
             self.smoothed_temp = temp
-            
+
         time_diff = read_time - self.last_temp_time
         self.last_temp = temp
         self.last_temp_time = read_time
@@ -170,7 +170,7 @@ class ControlPID:
         self.prev_temp_time = 0.
         self.prev_temp_deriv = 0.
         self.prev_temp_integ = 0.
-        
+
     def temperature_callback(self, read_time, temp):
         current_temp, target_temp = self.temperature_fan.get_temp(read_time)
         time_diff = read_time - self.prev_temp_time
