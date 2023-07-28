@@ -3,7 +3,7 @@
 # Copyright (C) 2019-2022  Kevin O'Connor <kevin@koconnor.net>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
-import logging, ast
+import logging, ast, logging
 from .display import display
 
 # Time between each led template update
@@ -191,6 +191,11 @@ class PrinterPWMLED:
         cycle_time = config.getfloat('cycle_time', 0.010, above=0.,
                                      maxval=MAX_SCHEDULE_TIME)
         hardware_pwm = config.getboolean('hardware_pwm', False)
+        
+        # Operating Range
+        self.min_power = config.getfloat('min_power', 0., above=0., maxval=1.)
+        self.max_power = config.getfloat('max_power', 1., above=0., maxval=1.)
+        
         self.pins = []
         for i, name in enumerate(("red", "green", "blue", "white")):
             pin_name = config.get(name + '_pin', None)
@@ -209,7 +214,8 @@ class PrinterPWMLED:
         self.led_helper = pled.setup_helper(config, self.update_leds, 1)
         self.prev_color = color = self.led_helper.get_status()['color_data'][0]
         for idx, mcu_pin in self.pins:
-            mcu_pin.setup_start_value(color[idx], 0.)
+            scaled_value = float(color[idx] * (self.max_power - self.min_power) + self.min_power)
+            mcu_pin.setup_start_value(scaled_value, 0.)
     def update_leds(self, led_state, print_time):
         if print_time is None:
             eventtime = self.printer.get_reactor().monotonic()
@@ -219,7 +225,8 @@ class PrinterPWMLED:
         color = led_state[0]
         for idx, mcu_pin in self.pins:
             if self.prev_color[idx] != color[idx]:
-                mcu_pin.set_pwm(print_time, color[idx])
+                scaled_value = float(color[idx] * (self.max_power - self.min_power) + self.min_power)
+                mcu_pin.set_pwm(print_time, scaled_value)
                 self.last_print_time = print_time
         self.prev_color = color
     def get_status(self, eventtime=None):
