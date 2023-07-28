@@ -214,7 +214,7 @@ class PrinterPWMLED:
         self.led_helper = pled.setup_helper(config, self.update_leds, 1)
         self.prev_color = color = self.led_helper.get_status()['color_data'][0]
         for idx, mcu_pin in self.pins:
-            scaled_value = 
+            scaled_value =
                 color[idx] * (self.max_power - self.min_power) + self.min_power
             mcu_pin.setup_start_value(scaled_value, 0.)
     def update_leds(self, led_state, print_time):
@@ -226,7 +226,7 @@ class PrinterPWMLED:
         color = led_state[0]
         for idx, mcu_pin in self.pins:
             if self.prev_color[idx] != color[idx]:
-                scaled_value = 
+                scaled_value =
                     color[idx] * (self.max_power - self.min_power)
                     + self.min_power
                 mcu_pin.set_pwm(print_time, scaled_value)
